@@ -25,7 +25,7 @@ try{
 // Set the POST options.
 
 	curl_setopt($session, CURLOPT_HEADER, 1);
-	curl_setopt($session,CURLOPT_HTTPHEADER,$header_array);
+	curl_setopt($session, CURLOPT_HTTPHEADER,$header_array);
 	curl_setopt($session, CURLOPT_HEADER, false);
 	curl_setopt($session, CURLOPT_RETURNTRANSFER, true);
 	curl_setopt($session, CURLOPT_SSL_VERIFYPEER, 0);
