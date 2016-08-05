@@ -3,9 +3,6 @@ require_once('../../polyhousestore/app/Mage.php');
 umask(0);
 Mage::app();
 
-/**
-* Classe para gerar Xml de Produtos
-*/
 class XMLNewegg
 {
 
@@ -16,7 +13,8 @@ class XMLNewegg
 		->addAttributeToSort('created_at', 'DESC')
 		->addAttributeToFilter('newegg_feed' , '1')
 		->addAttributeToFilter('status' , '1')
-		->addAttributeToSelect('*')->setPageSize(10000);
+		->addAttributeToSelect('*')
+		->setPageSize(10000);
 		$collection->getSelect();
 
 		$doc = new DomDocument('1.0' , 'utf-8');
@@ -50,11 +48,11 @@ class XMLNewegg
 		$Itemfeed = new DOMElement('Itemfeed');
 		$Message->appendChild($Itemfeed);
 
-		$SummaryInfo = new DOMElement('SummaryInfo','');
+		$SummaryInfo = new DOMElement('SummaryInfo');
 		$Itemfeed->appendChild($SummaryInfo);
 
-		//$SubCategoryID = new DOMElement('SubCategoryID','2809');
-		//$SummaryInfo->appendChild($SubCategoryID);
+		$SubCategoryID = new DOMElement('SubCategoryID','510');
+		$SummaryInfo->appendChild($SubCategoryID);
 
 		for ($i=1; $i <= $collection->getLastPageNumber(); $i++) {
 			if ($collection->isLoaded()) {
@@ -69,16 +67,16 @@ class XMLNewegg
 				$sku           = $product->getSku();
 				$upc           = $product->getUpc();
 				$name          = $product->getName();
-				$manufacture   = $product->getData('manufacture');
+				$manufacture   = $product->getAttributeText('manufacturer');
 				$mnfPartNumber = $product->getData('part_number');
 				$shortDesc     = preg_replace("/&#?[a-z0-9]{2,8};/i","",strip_tags($product->getShort_description()));
 				$productDesc   = preg_replace("/&#?[a-z0-9]{2,8};/i","",strip_tags($product->getDescription()));
 
 
-				$weight = $product->getWeight();
-				$length = $product->getLength();
-				$height = $product->getHeight();
-     			$width  = $product->getWidth();
+				$weight = number_format($product->getWeight(),2);
+				$length = number_format($product->getLength(),2);
+				$height = number_format($product->getHeight(),2);
+     			$width  = number_format($product->getWidth(),2);
 
      			$itemCondition = $product->getAttributeText('condition');
 
@@ -87,6 +85,16 @@ class XMLNewegg
      			$price = str_replace(',', '', number_format($product->getData('newegg_price'),2));
 
      			$qtyPackage = $product->getAttributeText('quantity_package');
+     			if ($qtyPackage > 0 && $qtyPackage < 2) {
+     				$qtyPackage = 1;
+     			}
+
+     			$stocklevel = (int)Mage::getModel('cataloginventory/stock_item')
+				->loadByProduct($product->getID())->getQty();
+
+				if ($stocklevel <= 0) {
+					$stocklevel = 0;
+				}
 
      			if ($product->getAttributeText('free_shipping_newegg') == 1) {
 
@@ -145,13 +153,13 @@ class XMLNewegg
 				$ItemWeight = new DOMElement('ItemWeight', $weight);
 				$BasicInfo->appendChild($ItemWeight);
 
-				$PacksOrSets = new DOMElement('PacksOrSets', $qtyPackage);
+				$PacksOrSets = new DOMElement('PacksOrSets', '1');
 				$BasicInfo->appendChild($PacksOrSets);
 
 				$ItemCondition = new DOMElement('ItemCondition', $itemCondition);
 				$BasicInfo->appendChild($ItemCondition);
 
-				$ItemPackage = new DOMElement('ItemPackage','');
+				$ItemPackage = new DOMElement('ItemPackage', $qtyPackage);
 				$BasicInfo->appendChild($ItemPackage);
 
 				$ShippingRestriction = new DOMElement('ShippingRestriction','No');
@@ -161,13 +169,13 @@ class XMLNewegg
 				$BasicInfo->appendChild($Currency);
 
 				$MSRP = new DOMElement('MSRP',$msrp);
-				$BasicInfo->appendChild($MSRP);
+				//$BasicInfo->appendChild($MSRP);
 
 				$MAP = new DOMElement('MAP', $map);
 				$BasicInfo->appendChild($MAP);
 
-				$CheckoutMAP = new DOMElement('CheckoutMAP','No');
-				$BasicInfo->appendChild($CheckoutMAP);
+				$CheckoutMAP = new DOMElement('CheckoutMAP','0');
+				//$BasicInfo->appendChild($CheckoutMAP);
 
 				$SellingPrice = new DOMElement('SellingPrice', $price);
 				$BasicInfo->appendChild($SellingPrice);
@@ -175,7 +183,7 @@ class XMLNewegg
 				$Shipping = new DOMElement('Shipping', $shipping);
 				$BasicInfo->appendChild($Shipping);
 
-				$Inventory = new DOMElement('Inventory','Inventory');
+				$Inventory = new DOMElement('Inventory', $stocklevel);
 				$BasicInfo->appendChild($Inventory);
 
 				$ActivationMark = new DOMElement('ActivationMark','ActivationMark');
@@ -198,6 +206,62 @@ class XMLNewegg
 
 		$dateSave = date("Y-m-d H:i:s");
 		$doc->save("c:/tmp/tmp.xml");
+
+		return $doc->saveXML();
+	}
+
+	public function xmlBodyResponse($sellerId, $requestId)
+	{
+		$doc = new DomDocument('1.0' , 'utf-8');
+		$doc->formatOutput = true;
+
+		$root = $doc->appendChild($doc->createElement('NeweggAPIRequest'));
+
+		/*
+		$root->appendChild($doc->createAttribute('xmlns:xs'))
+		->appendChild($doc->createTextNode('http://www.w3.org/2001/XMLSchema'));
+		$root->appendChild($doc->createAttribute('elementFormDefault'))
+		->appendChild($doc->createTextNode('qualified'));
+		$root->appendChild($doc->createAttribute('attributeFormDefault'))
+		->appendChild($doc->createTextNode('unqualified'));
+		*/
+
+
+		$OperationType = new DOMElement('OperationType','GetFeedStatusRequest');
+		$root->appendChild($OperationType);
+
+		$RequestBody = new DOMElement('RequestBody');
+		$root->appendChild($RequestBody);
+
+		$GetRequestStatus = new DOMElement('GetRequestStatus');
+		$RequestBody->appendChild($GetRequestStatus);
+
+		$RequestIDList = new DOMElement('RequestIDList');
+		$GetRequestStatus->appendChild($RequestIDList);
+
+		$RequestID = new DOMElement('RequestID', $requestId);
+		$RequestIDList->appendChild($RequestID);
+
+		$RequestTypeList = new DOMElement('RequestTypeList');
+		$GetRequestStatus->appendChild($RequestTypeList);
+
+		$RequestType = new DOMElement('RequestType', 'ITEM_DATA');
+		$RequestTypeList->appendChild($RequestType);
+
+		$MaxCount = new DOMElement('MaxCount','100');
+		$GetRequestStatus->appendChild($MaxCount);
+
+		$RequestStatus = new DOMElement('RequestStatus','ALL');
+		$GetRequestStatus->appendChild($RequestStatus);
+
+		$RequestDateFrom = new DOMElement('RequestDateFrom','');
+		$GetRequestStatus->appendChild($RequestDateFrom);
+
+		$RequestDateTo = new DOMElement('RequestDateTo','');
+		$GetRequestStatus->appendChild($RequestDateTo);
+
+		$dateSave = date("Y-m-d H:i:s");
+		$doc->save("c:/tmp/tmpRespBody.xml");
 
 		return $doc->saveXML();
 	}
